@@ -4,12 +4,10 @@ const orderRoutes = require('./routes/autoRoutes');
 require('dotenv').config();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(express.json());
 
 app.use('/', orderRoutes);
 
-// Root route
 app.get('/', (req, res) => {
     res.json({
         success: true,
@@ -49,7 +47,6 @@ app.use((err, req, res, next) => {
 // Start server
 app.listen(PORT, () => {
     console.log(`🚀 Server is running on http://localhost:${PORT}`);
-    console.log(`📡 Test endpoint: http://localhost:${PORT}/getServerTime`);
 });
 
 module.exports = app;
