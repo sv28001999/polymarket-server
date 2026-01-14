@@ -1,10 +1,70 @@
 require('dotenv').config();
 const { ClobClient } = require('@polymarket/clob-client');
-const { Wallet } = require('ethers');
+const { ethers } = require('ethers');
 const axios = require('axios');
 
 const HOST = "https://clob.polymarket.com";
 const CHAIN_ID = 137; // Polygon mainnet
+
+// Helper functions from getOpenOrders.js
+function getSignatureTypeName(type) {
+    const types = {
+        0: 'EOA/MetaMask',
+        1: 'Magic/Email',
+        2: 'Proxy Wallet'
+    };
+    return types[type] || 'Unknown';
+}
+
+function formatSide(side) {
+    if (!side) return 'N/A';
+    const sideStr = side.toString().toUpperCase();
+    return sideStr === 'BUY' || sideStr === '0' ? '🟢 BUY' : '🔴 SELL';
+}
+
+function formatPrice(price) {
+    if (!price) return '0.00';
+    return parseFloat(price).toFixed(4);
+}
+
+function formatAmount(amount) {
+    if (!amount) return '0';
+    return parseFloat(amount).toFixed(2);
+}
+
+function getRemainingSize(order) {
+    const original = parseFloat(order.original_size || order.size || 0);
+    const matched = parseFloat(order.size_matched || order.sizeMatched || 0);
+    return Math.max(0, original - matched);
+}
+
+function formatDate(timestamp) {
+    if (!timestamp) return 'N/A';
+
+    // Handle Unix timestamp (seconds)
+    const ts = timestamp.toString().length === 10
+        ? parseInt(timestamp) * 1000
+        : parseInt(timestamp);
+
+    try {
+        const date = new Date(ts);
+        return date.toLocaleString();
+    } catch (e) {
+        return timestamp;
+    }
+}
+
+// Create a compatible wallet wrapper for ethers v6
+function createCompatibleWallet(privateKey) {
+    const wallet = new ethers.Wallet(privateKey);
+    
+    // Add _signTypedData if it doesn't exist (for ethers v6 compatibility)
+    if (!wallet._signTypedData && wallet.signTypedData) {
+        wallet._signTypedData = wallet.signTypedData.bind(wallet);
+    }
+    
+    return wallet;
+}
 
 // Get server time from Polymarket
 const getServerTime = async (req, res, next) => {
@@ -29,6 +89,8 @@ const getServerTime = async (req, res, next) => {
 
 const getOpenOrders = async (req, res, next) => {
     try {
+        console.log('📗 Connecting to Polymarket CLOB...\n');
+
         // Validate env vars
         if (!process.env.PRIVATE_KEY) {
             return res.status(400).json({
@@ -44,15 +106,18 @@ const getOpenOrders = async (req, res, next) => {
             });
         }
 
-        // Create signer
-        const signer = new Wallet(process.env.PRIVATE_KEY);
+        // Create signer with compatibility wrapper
+        const signer = createCompatibleWallet(process.env.PRIVATE_KEY);
 
         // Temp client to derive API creds
+        console.log('🔐 Creating API credentials...');
         const tempClient = new ClobClient(HOST, CHAIN_ID, signer);
         const apiCreds = await tempClient.createOrDeriveApiKey();
+        console.log('✅ API credentials created');
 
         // Signature type
-        const signatureType = parseInt(process.env.SIGNATTYPE || "0");
+        const signatureType = parseInt(process.env.SIGNATTYPE || '0');
+        console.log(`📝 Using signature type: ${signatureType} (${getSignatureTypeName(signatureType)})\n`);
 
         // Authenticated client
         const client = new ClobClient(
@@ -64,19 +129,74 @@ const getOpenOrders = async (req, res, next) => {
             process.env.FUNDER_ADDRESS
         );
 
+        console.log('📊 Fetching open orders...\n');
+
         // Fetch open orders
         const openOrders = await client.getOpenOrders();
+
+        if (openOrders.length === 0) {
+            console.log('🔭 No open orders found.');
+            
+            return res.status(200).json({
+                success: true,
+                signer: signer.address,
+                funder: process.env.FUNDER_ADDRESS,
+                totalOrders: 0,
+                message: 'No open orders found',
+                orders: []
+            });
+        }
+
+        console.log(`✅ Found ${openOrders.length} open order(s):\n`);
+        console.log('='.repeat(80));
+
+        // Format orders with detailed information
+        const formattedOrders = openOrders.map((order, index) => {
+            const orderInfo = {
+                orderNumber: index + 1,
+                id: order.id || order.orderID || 'N/A',
+                market: order.market || 'N/A',
+                tokenId: order.asset_id || order.tokenID || 'N/A',
+                side: formatSide(order.side),
+                sideRaw: order.side,
+                price: `${formatPrice(order.price)} USDC`,
+                priceRaw: order.price,
+                size: formatAmount(order.original_size || order.size),
+                sizeRaw: order.original_size || order.size,
+                filled: formatAmount(order.size_matched || order.sizeMatched || 0),
+                filledRaw: order.size_matched || order.sizeMatched || 0,
+                remaining: formatAmount(getRemainingSize(order)),
+                remainingRaw: getRemainingSize(order),
+                status: order.status || 'LIVE',
+                orderType: order.type || order.orderType || 'GTC',
+                created: formatDate(order.created_at || order.timestamp),
+                createdRaw: order.created_at || order.timestamp,
+                expiration: order.expiration ? formatDate(order.expiration) : null,
+                expirationRaw: order.expiration || null
+            };
+
+            return orderInfo;
+        });
+
+        console.log('\n' + '='.repeat(80));
+        console.log(`\n📈 Total open orders: ${openOrders.length}`);
+        console.log('✨ Done!\n');
 
         return res.status(200).json({
             success: true,
             signer: signer.address,
             funder: process.env.FUNDER_ADDRESS,
             totalOrders: openOrders.length,
-            orders: openOrders
+            orders: formattedOrders,
+            rawOrders: openOrders
         });
 
     } catch (error) {
-        console.error("❌ Open Orders Error:", error.message);
+        console.error("\n❌ Open Orders Error:", error.message);
+
+        if (error.response) {
+            console.error('API Response:', error.response.data);
+        }
 
         return res.status(500).json({
             success: false,
