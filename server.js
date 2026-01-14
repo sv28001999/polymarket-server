@@ -1,11 +1,13 @@
-// server.js
 const express = require('express');
-const axios = require('axios');
 const app = express();
+const orderRoutes = require('./routes/autoRoutes');
+require('dotenv').config();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
+
+app.use('/', orderRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -16,27 +18,6 @@ app.get('/', (req, res) => {
             serverTime: '/getServerTime'
         }
     });
-});
-
-// Get server time from Polymarket
-app.get('/getServerTime', async (req, res) => {
-    try {
-        const response = await axios.get('https://clob.polymarket.com/time');
-
-        res.json({
-            success: true,
-            data: response.data,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error('Error fetching time:', error.message);
-
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch server time',
-            error: error.message
-        });
-    }
 });
 
 // Health check
