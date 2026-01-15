@@ -4,7 +4,7 @@ const router = express.Router();
 const { getServerTime,
     getOpenOrders,
     getMatchedTrades,
- } = require('../controllers/orderDetails');
+} = require('../controllers/orderDetails');
 const { placeOrder } = require('../controllers/placeOrder');
 const { getBtcEvent } = require('../controllers/eventDetails');
 
