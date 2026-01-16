@@ -120,7 +120,7 @@ const placeOrder = async (req, res, next) => {
         // Convert side to BUY/SELL
         // UP = BUY (you're buying the outcome)
         // DOWN = SELL (you're selling the outcome or buying the opposite)
-        const orderSide = side.toUpperCase() === 'BUY' ? Side.BUY : Side.SELL;
+        const orderSide = side.toUpperCase() === 'UP' ? Side.BUY : Side.SELL;
 
         // Convert price from cents to decimal (e.g., 50 cents = 0.50)
         const priceDecimal = price / 100;
