@@ -187,7 +187,7 @@ const getOpenOrders = async (req, res, next) => {
             signer: signer.address,
             funder: process.env.FUNDER_ADDRESS,
             totalOrders: openOrders.length,
-            orders: formattedOrders,
+            // orders: formattedOrders,
             rawOrders: openOrders
         });
 
