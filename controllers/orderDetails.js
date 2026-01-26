@@ -2,6 +2,7 @@ require('dotenv').config();
 const { ClobClient } = require('@polymarket/clob-client');
 const { ethers } = require('ethers');
 const axios = require('axios');
+const URL = 'https://gamma-api.polymarket.com/markets/slug/btc-updown-15m-';
 
 const HOST = "https://clob.polymarket.com";
 const CHAIN_ID = 137; // Polygon mainnet
@@ -209,7 +210,20 @@ const getOpenOrders = async (req, res, next) => {
 
 const getMatchedTrades = async (req, res, next) => {
     try {
-        console.log('📗 Connecting to Polymarket CLOB...\n');
+        const { epochTime } = req.body;
+        if (!epochTime || typeof epochTime !== 'string') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid epochTime: must be a non-empty string'
+            });
+        }
+
+        const response = await axios.get(`${URL}${epochTime}`);
+        console.log(response.data);
+
+        const marketId = response.data.conditionId;
+        console.log("Market ID:", marketId);
+
 
         // Validate env vars
         if (!process.env.PRIVATE_KEY) {
@@ -254,13 +268,15 @@ const getMatchedTrades = async (req, res, next) => {
         console.log('📊 Fetching matched trades...\n');
 
         // Fetch trades (matched orders)
-        const trades = await client.getTrades();
+        const trades = await client.getTrades({
+            market: marketId
+        });
 
         if (trades.length === 0) {
             console.log('🔭 No matched trades found.');
 
             return res.status(200).json({
-                success: true,
+                success: trades.length == 0 ? false : true,
                 signer: signer.address,
                 funder: process.env.FUNDER_ADDRESS,
                 totalTrades: 0,
@@ -269,47 +285,31 @@ const getMatchedTrades = async (req, res, next) => {
             });
         }
 
+        // Filter for BUY trades only, then format
+        const formattedTrades = trades
+            .filter(trade => trade.side === "BUY")
+            .map(trade => ({
+                success: true,
+                clobId: trade.asset_id,
+                side: trade.side,
+                size: trade.size,
+                price: trade.price,
+                tradeStatus: trade.status,
+                match_time: trade.match_time
+            }));
+
         console.log(`✅ Found ${trades.length} matched trade(s):\n`);
         console.log('='.repeat(80));
-
-        // Format trades with detailed information
-        const formattedTrades = trades.map((trade, index) => {
-            const tradeInfo = {
-                tradeNumber: index + 1,
-                id: trade.id || 'N/A',
-                orderId: trade.order_id || trade.orderID || 'N/A',
-                market: trade.market || 'N/A',
-                tokenId: trade.asset_id || trade.tokenID || 'N/A',
-                side: formatSide(trade.side),
-                sideRaw: trade.side,
-                price: `${formatPrice(trade.price)} USDC`,
-                priceRaw: trade.price,
-                size: formatAmount(trade.size),
-                sizeRaw: trade.size,
-                feeRateBps: trade.fee_rate_bps || 0,
-                fee: trade.fee ? `${formatAmount(trade.fee)} USDC` : '0.00 USDC',
-                feeRaw: trade.fee || 0,
-                status: trade.status || 'MATCHED',
-                tradeTime: formatDate(trade.timestamp || trade.created_at),
-                tradeTimeRaw: trade.timestamp || trade.created_at,
-                transactionHash: trade.transaction_hash || trade.transactionHash || 'N/A',
-                matchId: trade.match_id || trade.matchID || 'N/A'
-            };
-
-            return tradeInfo;
-        });
 
         console.log('\n' + '='.repeat(80));
         console.log(`\n📈 Total matched trades: ${trades.length}`);
         console.log('✨ Done!\n');
 
         return res.status(200).json({
-            success: true,
-            signer: signer.address,
-            funder: process.env.FUNDER_ADDRESS,
+            success: trades.length == 0 ? false : true,
             totalTrades: trades.length,
-            // trades: formattedTrades,
-            rawTrades: trades
+            tradeInfo: formattedTrades,
+            // rawTrades: trades
         });
 
     } catch (error) {
