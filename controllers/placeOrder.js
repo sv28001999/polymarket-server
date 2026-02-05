@@ -27,12 +27,12 @@ axios.defaults.headers.common['Connection'] = 'keep-alive';
 // Create a compatible wallet wrapper for ethers v6
 function createCompatibleWallet(privateKey) {
     const wallet = new ethers.Wallet(privateKey);
-    
+
     // Add _signTypedData if it doesn't exist (for ethers v6 compatibility)
     if (!wallet._signTypedData && wallet.signTypedData) {
         wallet._signTypedData = wallet.signTypedData.bind(wallet);
     }
-    
+
     return wallet;
 }
 
@@ -40,7 +40,7 @@ function createCompatibleWallet(privateKey) {
 async function initializeClient(privateKey, funderAddress = null, signatureType = 0) {
     try {
         const signer = createCompatibleWallet(privateKey);
-        
+
         console.log('🔑 Wallet address:', signer.address);
 
         // Add delay to avoid rate limiting
@@ -240,7 +240,7 @@ const placeOrder = async (req, res, next) => {
         console.log('✨ Done!\n');
 
         return res.status(200).json({
-            success: true,
+            success: response.orderID ? true : false,
             message: 'Order placed successfully',
             orderId: response.orderID,
             transactionHash: response.transactionHash,
@@ -263,7 +263,7 @@ const placeOrder = async (req, res, next) => {
         if (error.response?.status === 403) {
             console.error('🚫 Cloudflare blocked the request - Security check failed');
             console.error('Response:', error.response?.data);
-            
+
             return res.status(403).json({
                 success: false,
                 message: 'Access blocked by Cloudflare security service',
@@ -315,7 +315,7 @@ const placeOrder = async (req, res, next) => {
         if (error.response) {
             console.error('API Response Status:', error.response.status);
             console.error('API Response Data:', error.response.data);
-            
+
             return res.status(error.response.status || 500).json({
                 success: false,
                 message: 'API request failed',

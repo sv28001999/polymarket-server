@@ -139,7 +139,7 @@ const getOpenOrders = async (req, res, next) => {
             console.log('🔭 No open orders found.');
 
             return res.status(200).json({
-                success: true,
+                success: false,
                 signer: signer.address,
                 funder: process.env.FUNDER_ADDRESS,
                 totalOrders: 0,
@@ -208,18 +208,121 @@ const getOpenOrders = async (req, res, next) => {
     }
 }
 
-const getMatchedTrades = async (req, res, next) => {
+const getCurrentOpenOrders = async (req, res, next) => {
     try {
-        const { epochTime } = req.body;
-        if (!epochTime || typeof epochTime !== 'string') {
+        console.log('📗 Connecting to Polymarket CLOB...\n');
+
+        // Validate env vars (early return pattern)
+        const { PRIVATE_KEY, FUNDER_ADDRESS, SIGNATTYPE = '0' } = process.env;
+
+        if (!PRIVATE_KEY || !FUNDER_ADDRESS) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid epochTime: must be a non-empty string'
+                message: `Missing required env vars: ${!PRIVATE_KEY ? 'PRIVATE_KEY ' : ''}${!FUNDER_ADDRESS ? 'FUNDER_ADDRESS' : ''}`
             });
         }
 
+        // Parallel initialization
+        const signer = createCompatibleWallet(PRIVATE_KEY);
+        const signatureType = parseInt(SIGNATTYPE);
+
+        console.log('🔐 Creating API credentials...');
+
+        // Create client once with proper configuration
+        const tempClient = new ClobClient(HOST, CHAIN_ID, signer);
+        const apiCreds = await tempClient.createOrDeriveApiKey();
+
+        console.log('✅ API credentials created');
+        console.log(`📝 Using signature type: ${signatureType} (${getSignatureTypeName(signatureType)})\n`);
+
+        const client = new ClobClient(
+            HOST,
+            CHAIN_ID,
+            signer,
+            apiCreds,
+            signatureType,
+            FUNDER_ADDRESS
+        );
+
+        console.log('📊 Fetching open orders...\n');
+
+        // Parallel API calls instead of sequential
+        const [timeResp, marketResp] = await Promise.all([
+            axios.get("https://clob.polymarket.com/time"),
+            (async () => {
+                const currentEpoch = (await axios.get("https://clob.polymarket.com/time")).data;
+                const timestampMs = currentEpoch < 10000000000 ? currentEpoch * 1000 : currentEpoch;
+                const fifteenMinutes = 15 * 60 * 1000;
+                const nextInterval = Math.ceil(timestampMs / fifteenMinutes) * fifteenMinutes;
+                const epoch = currentEpoch < 10000000000 ? Math.floor(nextInterval / 1000) - 900 : nextInterval - 900;
+                return axios.get(`${URL}${epoch}`);
+            })()
+        ]);
+
+        const marketId = marketResp.data.conditionId;
+        console.log("Market ID:", marketId);
+
+        // Fetch open orders
+        const openOrders = await client.getOpenOrders({ market: marketId });
+
+        if (openOrders.length === 0) {
+            console.log('🔭 No open orders found.');
+            return res.status(200).json({
+                success: false,
+                signer: signer.address,
+                funder: FUNDER_ADDRESS,
+                totalOrders: 0,
+                message: 'No open orders found',
+                orders: []
+            });
+        }
+
+        console.log(`✅ Found ${openOrders.length} open order(s):\n`);
+
+        // Only format orders if you're actually using formattedOrders
+        // Since it's commented out, skip this expensive operation
+        // const formattedOrders = openOrders.map((order, index) => { ... });
+
+        console.log(`\n📈 Total open orders: ${openOrders.length}`);
+        console.log('✨ Done!\n');
+
+        return res.status(200).json({
+            success: true,
+            signer: signer.address,
+            funder: FUNDER_ADDRESS,
+            totalOrders: openOrders.length,
+            rawOrders: openOrders
+        });
+
+    } catch (error) {
+        console.error("\n❌ Open Orders Error:", error.message);
+        if (error.response) {
+            console.error('API Response:', error.response.data);
+        }
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch open orders",
+            error: error.message,
+            apiError: error.response?.data || null
+        });
+    }
+};
+
+const getMatchedTrades = async (req, res, next) => {
+    try {
+        const resp = await axios.get("https://clob.polymarket.com/time");
+        const currentEpoch = resp.data;
+        const timestampMs = currentEpoch < 10000000000 ? currentEpoch * 1000 : currentEpoch;
+        const fifteenMinutes = 15 * 60 * 1000;
+        const nextInterval = Math.ceil(timestampMs / fifteenMinutes) * fifteenMinutes;
+        const epoch = currentEpoch < 10000000000 ? Math.floor(nextInterval / 1000) - 900 : nextInterval - 900;
+        const epochTime = String(epoch);
+        console.log(epochTime);
+        console.log(typeof (epochTime));
+
         const response = await axios.get(`${URL}${epochTime}`);
-        console.log(response.data);
+        // console.log(response.data);
 
         const marketId = response.data.conditionId;
         console.log("Market ID:", marketId);
@@ -268,35 +371,25 @@ const getMatchedTrades = async (req, res, next) => {
         console.log('📊 Fetching matched trades...\n');
 
         // Fetch trades (matched orders)
-        const trades = await client.getTrades({
-            market: marketId
-        });
+        const trades = await client.getTrades({ market: marketId });
 
-        if (trades.length === 0) {
+        const orderIds = [...new Set(
+            trades.flatMap(t => t.maker_orders.map(m => m.order_id))
+        )];
+
+        if (trades.length === 0 || orderIds.length == 0) {
             console.log('🔭 No matched trades found.');
 
             return res.status(200).json({
-                success: trades.length == 0 ? false : true,
-                signer: signer.address,
-                funder: process.env.FUNDER_ADDRESS,
+                success: (trades.length == 0) || (orderIds.length == 0) ? false : true,
+                // signer: signer.address,
+                // funder: process.env.FUNDER_ADDRESS,
                 totalTrades: 0,
                 message: 'No matched trades found',
-                trades: []
+                matchedOrderIds: [],
+                epochTime: epochTime
             });
         }
-
-        // Filter for BUY trades only, then format
-        const formattedTrades = trades
-            .filter(trade => trade.side === "BUY")
-            .map(trade => ({
-                success: true,
-                clobId: trade.asset_id,
-                side: trade.side,
-                size: trade.size,
-                price: trade.price,
-                tradeStatus: trade.status,
-                match_time: trade.match_time
-            }));
 
         console.log(`✅ Found ${trades.length} matched trade(s):\n`);
         console.log('='.repeat(80));
@@ -306,9 +399,11 @@ const getMatchedTrades = async (req, res, next) => {
         console.log('✨ Done!\n');
 
         return res.status(200).json({
-            success: trades.length == 0 ? false : true,
+            success: (trades.length == 0) || (orderIds.length == 0) ? false : true,
             totalTrades: trades.length,
-            tradeInfo: formattedTrades,
+            matchedOrderIds: orderIds,
+            message: 'Order Found',
+            epochTime: epochTime,
             // rawTrades: trades
         });
 
@@ -337,5 +432,6 @@ const getMatchedTrades = async (req, res, next) => {
 module.exports = {
     getServerTime,
     getOpenOrders,
-    getMatchedTrades
+    getMatchedTrades,
+    getCurrentOpenOrders
 }
