@@ -125,7 +125,7 @@ const placeOrder = async (req, res, next) => {
             quantity,
             privateKey = process.env.PRIVATE_KEY,
             funderAddress = process.env.FUNDER_ADDRESS,
-            signatureType = 1,
+            signatureType = 2,
             orderType = 'GTC',
             tickSize = '0.01',
             negRisk = false
