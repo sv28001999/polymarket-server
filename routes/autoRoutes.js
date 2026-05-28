@@ -10,10 +10,10 @@ const { getServerTime,
     getHighPriceTrade,
     get3hrOpenTrades,
     cancelOrder,
-    cancelLastOrder
+    cancelLastOrder,
 } = require('../controllers/orderDetails');
 const { placeOrder } = require('../controllers/placeOrder');
-const { getBtcEvent, get5minBtcEvent, getCurrentPrice } = require('../controllers/eventDetails');
+const { getBtcEvent, get5minBtcEvent, getCurrentPrice, getTrades, dummyTrading } = require('../controllers/eventDetails');
 
 router.route('/getServerTime').get(getServerTime);
 router.route('/getOpenOrders').get(getOpenOrders);
@@ -29,5 +29,7 @@ router.route('/placeOrder').post(placeOrder);
 router.route('/cancelOrder').post(cancelOrder);
 router.route('/cancelLastOrder').post(cancelLastOrder);
 router.route('/getCurrentPrice').post(getCurrentPrice);
+router.route('/getTrades').get(getTrades);
+router.route('/dummyTrading').get(dummyTrading);
 
 module.exports = router;
