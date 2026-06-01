@@ -750,6 +750,8 @@ const getMatchedTrades5Min = async (req, res, next) => {
 
         // Fetch trades (matched orders)
         const trades = await client.getTrades({ market: marketId });
+        console.log(trades);
+
 
         const orderIds = [...new Set(
             trades.flatMap(t => t.maker_orders.map(m => m.order_id))
@@ -779,6 +781,7 @@ const getMatchedTrades5Min = async (req, res, next) => {
         return res.status(200).json({
             success: (trades.length == 0) || (orderIds.length == 0) ? false : true,
             totalTrades: trades.length,
+            quantity: trades[0].size,
             matchedOrderIds: orderIds,
             message: 'Order Found',
             epochTime: epochTime,
