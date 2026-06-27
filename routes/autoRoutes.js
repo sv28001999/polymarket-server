@@ -13,7 +13,7 @@ const { getServerTime,
     cancelLastOrder,
 } = require('../controllers/orderDetails');
 const { placeOrder } = require('../controllers/placeOrder');
-const { getBtcEvent, get5minBtcEvent, getCurrentPrice, getTrades, dummyTrading } = require('../controllers/eventDetails');
+const { getBtcEvent, get5minBtcEvent, getCurrentPrice, getCurrentPrice15min, getTrades, dummyTrading } = require('../controllers/eventDetails');
 
 router.route('/getServerTime').get(getServerTime);
 router.route('/getOpenOrders').get(getOpenOrders);
@@ -29,6 +29,7 @@ router.route('/placeOrder').post(placeOrder);
 router.route('/cancelOrder').post(cancelOrder);
 router.route('/cancelLastOrder').post(cancelLastOrder);
 router.route('/getCurrentPrice').post(getCurrentPrice);
+router.route('/getCurrentPrice15min').post(getCurrentPrice15min);
 router.route('/getTrades').get(getTrades);
 router.route('/dummyTrading').get(dummyTrading);
 

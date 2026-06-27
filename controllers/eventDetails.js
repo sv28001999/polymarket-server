@@ -129,6 +129,60 @@ const getCurrentPrice = async (req, res, next) => {
     }
 };
 
+const getCurrentPrice15min = async (req, res, next) => {
+    try {
+        const { epochTime, side } = req.body;
+
+        if (!epochTime || !side) {
+            return res.status(400).json({
+                success: false,
+                message: 'epochTime and side are required'
+            });
+        }
+
+        if (!["UP", "DOWN"].includes(side)) {
+            return res.status(400).json({
+                success: false,
+                message: 'side must be UP or DOWN'
+            });
+        }
+
+        const eventRes = await axios.get(`${URL}${epochTime}`);
+
+        if (!eventRes.data?.clobTokenIds) {
+            return res.status(404).json({
+                success: false,
+                message: 'Event not found or missing token data'
+            });
+        }
+
+        const clobToken = parseUpDown(eventRes.data.clobTokenIds)[side];
+
+        const priceRes = await axios.get(`${PRICE_URL}${clobToken}`);
+
+        const price = priceRes.data?.price;
+        if (price === undefined) {
+            return res.status(502).json({
+                success: false,
+                message: 'Price data unavailable'
+            });
+        }
+
+        console.log("Price: " + price * 100);
+
+
+        return res.status(200).json({
+            success: true,
+            message: `Price for ${side}`,
+            price: price * 100,
+            clobId: clobToken
+        });
+
+    } catch (err) {
+        next(err);
+    }
+};
+
 if (!fs.existsSync(TXT_FILE)) {
     fs.writeFileSync(TXT_FILE, '===== TRADE LOG =====\n', 'utf8');
 }
@@ -286,4 +340,4 @@ const getTrades = (req, res, next) => {
     }
 };
 
-module.exports = { getBtcEvent, get5minBtcEvent, getCurrentPrice, dummyTrading, getTrades };
+module.exports = { getBtcEvent, get5minBtcEvent, getCurrentPrice, getCurrentPrice15min, dummyTrading, getTrades };
