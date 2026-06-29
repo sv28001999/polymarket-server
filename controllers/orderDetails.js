@@ -782,6 +782,7 @@ const getMatchedTrades5Min = async (req, res, next) => {
             success: (trades.length == 0) || (orderIds.length == 0) ? false : true,
             totalTrades: trades.length,
             quantity: trades[0].size,
+            side: trades[0].outcome,
             matchedOrderIds: orderIds,
             message: 'Order Found',
             epochTime: epochTime,
