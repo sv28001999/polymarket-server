@@ -1117,7 +1117,7 @@ const cancelLastOrder = async (req, res, next) => {
                 const nextInterval = Math.ceil(timestampMs / fifteenMinutes) * fifteenMinutes;
                 const epoch = currentEpoch < 10000000000 ? Math.floor(nextInterval / 1000) : nextInterval;
                 console.log("Cancel Trade For: " + epoch);
-                return axios.get(`${URL5Min}${epoch}`);
+                return axios.get(`${URL5Min}${epoch - 300}`);
             })()
         ]);
 
@@ -1146,7 +1146,7 @@ const cancelLastOrder = async (req, res, next) => {
         console.log(`✅ Found ${openOrders.length} open order(s), cancelling...\n`);
 
         // ── Cancel all open orders in parallel ────────────────────────────────
-        const ordersToCancel = openOrders.filter(order => order.price >= 0.45);
+        const ordersToCancel = openOrders.filter(order => order.price == 0.05);
 
         const cancelResults = await Promise.allSettled(
             ordersToCancel.map(order =>
